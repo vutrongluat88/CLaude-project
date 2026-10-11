@@ -32,6 +32,7 @@ services:
     region: singapore
     dockerfilePath: ./docker/prod/backend.Dockerfile
     dockerContext: .
+    autoDeployTrigger: checksPass # deploy only after GitHub CI passes
     healthCheckPath: /up
     buildFilter:
       paths:
@@ -90,6 +91,7 @@ services:
     name: user-management-web
     runtime: static
     rootDir: frontend
+    autoDeployTrigger: checksPass # deploy only after GitHub CI passes
     buildCommand: npm ci && npm run generate
     staticPublishPath: .output/public
     envVars:
