@@ -1,0 +1,113 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# The browser only ever talks to the static site: it proxies /api/* and
+# /sanctum/* to the API service, so the SPA and the API share one origin.
+# That is what lets Sanctum's session cookie work — *.onrender.com is on the
+# Public Suffix List, so two onrender.com subdomains are cross-site.
+#
+# If Render gives either service a different hostname than its name (names are
+# global), update the hostnames below: the rewrite destinations and
+# APP_URL / FRONTEND_URL / SANCTUM_STATEFUL_DOMAINS.
+
+databases:
+  - name: user-management-db
+    plan: free
+    region: singapore
+    databaseName: user_management
+    user: app
+    postgresMajorVersion: "17"
+
+services:
+  - type: keyvalue
+    name: user-management-kv
+    plan: free
+    region: singapore
+    ipAllowList: [] # internal connections only
+    maxmemoryPolicy: allkeys-lru
+
+  - type: web
+    name: user-management-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./docker/prod/backend.Dockerfile
+    dockerContext: .
+    healthCheckPath: /up
+    buildFilter:
+      paths:
+        - backend/**
+        - docker/prod/**
+    envVars:
+      # Secrets: Render prompts for these when the Blueprint is first applied.
+      - key: APP_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      - key: APP_NAME
+        value: User Management
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        value: https://user-management-web.onrender.com
+      - key: FRONTEND_URL
+        value: https://user-management-web.onrender.com
+      - key: SANCTUM_STATEFUL_DOMAINS
+        value: user-management-web.onrender.com
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: user-management-db
+          property: connectionString
+
+      - key: REDIS_CLIENT
+        value: phpredis
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: user-management-kv
+          property: connectionString
+      - key: CACHE_STORE
+        value: redis
+      - key: QUEUE_CONNECTION
+        value: sync
+
+  - type: web
+    name: user-management-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run generate
+    staticPublishPath: .output/public
+    envVars:
+      # Baked into the build (ssr: false), so it must be set at build time.
+      - key: NUXT_PUBLIC_API_BASE
+        value: /api
+      - key: NODE_VERSION
+        value: "26"
+      - key: NUXT_TELEMETRY_DISABLED
+        value: "1"
+    routes:
+      # First match wins: API proxies before the SPA fallback.
+      - type: rewrite
+        source: /api/*
+        destination: https://user-management-api.onrender.com/api/*
+      - type: rewrite
+        source: /sanctum/*
+        destination: https://user-management-api.onrender.com/sanctum/*
+      - type: rewrite
+        source: /*
+        destination: /index.html

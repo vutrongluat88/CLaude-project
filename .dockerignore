@@ -1,0 +1,15 @@
+# Build context for docker/prod/backend.Dockerfile (repo root).
+.git
+.env
+frontend
+**/node_modules
+backend/vendor
+backend/.env
+backend/.env.*
+backend/storage/logs/*
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/framework/testing
+backend/bootstrap/cache/*.php
+backend/.phpunit.cache
